@@ -21,6 +21,7 @@ $username = $_SESSION['username'];
     <!-- Chart.js from CDN -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
     <style>
+        /* Dashboard specific styles */
         .dashboard-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -38,6 +39,7 @@ $username = $_SESSION['username'];
         
         .dashboard-card:hover {
             box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            transform: translateY(-5px);
         }
         
         .card-title {
@@ -59,6 +61,18 @@ $username = $_SESSION['username'];
             position: relative;
         }
         
+        .card-info {
+            margin-top: 15px;
+            font-size: 14px;
+            color: #6b7280;
+        }
+        
+        .card-info p {
+            margin: 5px 0;
+            display: flex;
+            justify-content: space-between;
+        }
+        
         .full-width {
             grid-column: 1 / -1;
         }
@@ -74,6 +88,11 @@ $username = $_SESSION['username'];
             border-radius: 8px;
             padding: 15px;
             text-align: center;
+            transition: transform 0.3s ease;
+        }
+        
+        .metric-card:hover {
+            transform: translateY(-5px);
         }
         
         .metric-value {
@@ -172,10 +191,45 @@ $username = $_SESSION['username'];
             margin-top: 20px;
             color: #6b7280;
             font-size: 14px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
         
-        .hidden {
-            display: none;
+        .countdown-container {
+            display: flex;
+            align-items: center;
+            margin-top: 10px;
+        }
+        
+        .countdown-bar {
+            width: 100px;
+            height: 6px;
+            background-color: #e5e7eb;
+            border-radius: 3px;
+            margin-left: 10px;
+            overflow: hidden;
+        }
+        
+        .countdown-progress {
+            height: 100%;
+            background-color: #4f46e5;
+            width: 100%;
+            transition: width linear 1s;
+        }
+        
+        @media (max-width: 768px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .card-content {
+                height: 180px;
+            }
+            
+            .metrics-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
         }
     </style>
 </head>
@@ -215,7 +269,7 @@ $username = $_SESSION['username'];
                 <div class="card-content">
                     <canvas id="personalStorageChart"></canvas>
                 </div>
-                <div id="personalStorageInfo"></div>
+                <div id="personalStorageInfo" class="card-info"></div>
             </div>
             
             <?php if($isAdmin): ?>
@@ -228,7 +282,7 @@ $username = $_SESSION['username'];
                 <div class="card-content">
                     <canvas id="diskUsageChart"></canvas>
                 </div>
-                <div id="diskUsageInfo"></div>
+                <div id="diskUsageInfo" class="card-info"></div>
             </div>
             
             <!-- CPU Temperature Card -->
@@ -259,7 +313,7 @@ $username = $_SESSION['username'];
                 <div class="card-content">
                     <canvas id="cpuUsageChart"></canvas>
                 </div>
-                <div id="cpuUsageInfo"></div>
+                <div id="cpuUsageInfo" class="card-info"></div>
             </div>
             
             <!-- Memory Usage Card -->
@@ -271,7 +325,7 @@ $username = $_SESSION['username'];
                 <div class="card-content">
                     <canvas id="memoryUsageChart"></canvas>
                 </div>
-                <div id="memoryUsageInfo"></div>
+                <div id="memoryUsageInfo" class="card-info"></div>
             </div>
             
             <!-- System Overview Card -->
@@ -294,8 +348,16 @@ $username = $_SESSION['username'];
                         <div class="metric-label">Total Storage Used</div>
                     </div>
                     <div class="metric-card">
+                        <div class="metric-value" id="systemUptime">--</div>
+                        <div class="metric-label">System Uptime</div>
+                    </div>
+                    <div class="metric-card">
                         <div class="metric-value" id="systemStatus">--</div>
                         <div class="metric-label">System Status</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value" id="kernelVersion">--</div>
+                        <div class="metric-label">Kernel Version</div>
                     </div>
                 </div>
             </div>
@@ -313,16 +375,22 @@ $username = $_SESSION['username'];
         
         <div class="last-updated">
             Last updated: <span id="lastUpdated">--</span>
-            <div>Auto-refresh: <span id="countdownTimer">10</span>s</div>
+            <div class="countdown-container">
+                Auto-refresh: <span id="countdownTimer">10</span>s
+                <div class="countdown-bar">
+                    <div class="countdown-progress" id="countdownBar"></div>
+                </div>
+            </div>
         </div>
     </main>
 
     <script>
-    // Charts configuration
+    // Charts and data management
     let charts = {};
-    let chartData = {};
     let refreshInterval = 10000; // 10 seconds
     let countdownTimer = 10;
+    let countdownInterval;
+    let isDataLoading = false;
     
     // Initialize the personal storage chart
     function initPersonalStorageChart() {
@@ -333,8 +401,31 @@ $username = $_SESSION['username'];
                 labels: ['Used', 'Free'],
                 datasets: [{
                     data: [0, 100],
-                    backgroundColor: ['#4f46e5', '#e5e7eb'],
-                    borderWidth: 0
+                    backgroundColor: [
+                        function(context) {
+                            const value = context.dataset.data[context.dataIndex];
+                            // First segment (Used)
+                            if (context.dataIndex === 0) {
+                                if (value < 70) return '#22c55e'; // Green - OK
+                                if (value < 85) return '#f59e0b'; // Yellow - Warning
+                                return '#ef4444'; // Red - Critical
+                            }
+                            // Second segment (Free)
+                            return '#e5e7eb'; // Gray
+                        },
+                    ],dataset.data[context.dataIndex];
+                            // First segment (Used)
+                            if (context.dataIndex === 0) {
+                                if (value < 70) return '#4f46e5'; // Blue - OK
+                                if (value < 90) return '#f59e0b'; // Yellow - Warning
+                                return '#ef4444'; // Red - Critical
+                            }
+                            // Second segment (Free)
+                            return '#e5e7eb'; // Gray
+                        },
+                    ],
+                    borderWidth: 0,
+                    hoverOffset: 10
                 }]
             },
             options: {
@@ -343,8 +434,24 @@ $username = $_SESSION['username'];
                 maintainAspectRatio: false,
                 plugins: {
                     legend: {
-                        position: 'bottom'
+                        position: 'bottom',
+                        labels: {
+                            font: {
+                                size: 12
+                            },
+                            padding: 10
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return context.label + ': ' + context.parsed + '%';
+                            }
+                        }
                     }
+                },
+                animation: {
+                    duration: 1000
                 }
             }
         });
@@ -361,16 +468,20 @@ $username = $_SESSION['username'];
                 datasets: [{
                     data: [0, 100],
                     backgroundColor: [
-                        // Color gradient based on usage
                         function(context) {
                             const value = context.dataset.data[context.dataIndex];
-                            if (value < 70) return '#22c55e'; // Green
-                            if (value < 85) return '#f59e0b'; // Orange
-                            return '#ef4444'; // Red
+                            // First segment (Used)
+                            if (context.dataIndex === 0) {
+                                if (value < 70) return '#22c55e'; // Green - OK
+                                if (value < 85) return '#f59e0b'; // Yellow - Warning
+                                return '#ef4444'; // Red - Critical
+                            }
+                            // Second segment (Free)
+                            return '#e5e7eb'; // Gray
                         },
-                        '#e5e7eb' // Gray for free space
                     ],
-                    borderWidth: 0
+                    borderWidth: 0,
+                    hoverOffset: 10
                 }]
             },
             options: {
@@ -379,24 +490,32 @@ $username = $_SESSION['username'];
                 maintainAspectRatio: false,
                 plugins: {
                     legend: {
-                        position: 'bottom'
+                        position: 'bottom',
+                        labels: {
+                            font: {
+                                size: 12
+                            },
+                            padding: 10
+                        }
                     },
                     tooltip: {
                         callbacks: {
                             label: function(context) {
-                                return context.label + ': ' + context.raw + '%';
+                                return context.label + ': ' + context.parsed + '%';
                             }
                         }
                     }
+                },
+                animation: {
+                    duration: 1000
                 }
             }
         });
     }
     
-    // Initialize the CPU usage chart as a doughnut
+    // Initialize the CPU usage chart
     function initCpuUsageChart() {
         const ctx = document.getElementById('cpuUsageChart').getContext('2d');
-        
         charts.cpuUsage = new Chart(ctx, {
             type: 'doughnut',
             data: {
@@ -408,7 +527,8 @@ $username = $_SESSION['username'];
                         '#f59e0b', // System - Orange
                         '#e5e7eb'  // Idle - Gray
                     ],
-                    borderWidth: 0
+                    borderWidth: 0,
+                    hoverOffset: 10
                 }]
             },
             options: {
@@ -417,7 +537,13 @@ $username = $_SESSION['username'];
                 maintainAspectRatio: false,
                 plugins: {
                     legend: {
-                        position: 'bottom'
+                        position: 'bottom',
+                        labels: {
+                            font: {
+                                size: 12
+                            },
+                            padding: 10
+                        }
                     },
                     tooltip: {
                         callbacks: {
@@ -426,26 +552,30 @@ $username = $_SESSION['username'];
                             }
                         }
                     }
+                },
+                animation: {
+                    duration: 1000
                 }
             }
         });
     }
     
-    // Initialize the memory usage chart as a doughnut
+    // Initialize the memory usage chart
     function initMemoryUsageChart() {
         const ctx = document.getElementById('memoryUsageChart').getContext('2d');
         charts.memoryUsage = new Chart(ctx, {
             type: 'doughnut',
             data: {
-                labels: ['Used', 'Cache', 'Available'],
+                labels: ['Used', 'Cache', 'Free'],
                 datasets: [{
                     data: [0, 0, 100],
                     backgroundColor: [
                         '#4f46e5', // Used - Blue
                         '#f59e0b', // Cache - Orange
-                        '#e5e7eb'  // Available - Gray
+                        '#e5e7eb'  // Free - Gray
                     ],
-                    borderWidth: 0
+                    borderWidth: 0,
+                    hoverOffset: 10
                 }]
             },
             options: {
@@ -454,7 +584,13 @@ $username = $_SESSION['username'];
                 maintainAspectRatio: false,
                 plugins: {
                     legend: {
-                        position: 'bottom'
+                        position: 'bottom',
+                        labels: {
+                            font: {
+                                size: 12
+                            },
+                            padding: 10
+                        }
                     },
                     tooltip: {
                         callbacks: {
@@ -463,18 +599,23 @@ $username = $_SESSION['username'];
                             }
                         }
                     }
+                },
+                animation: {
+                    duration: 1000
                 }
             }
         });
     }
-    <?php endif; ?>
     
     // Update the temperature gauge
     function updateTemperatureGauge(temperature) {
         const needle = document.getElementById('tempNeedle');
         const value = document.getElementById('tempValue');
         
-        if (!needle || !value) return;
+        if (!needle || !value || temperature === null) {
+            if (value) value.textContent = 'N/A';
+            return;
+        }
         
         // Update the value display
         value.textContent = temperature + '°C';
@@ -499,19 +640,19 @@ $username = $_SESSION['username'];
     function updateCharts(data) {
         // Update personal storage chart
         if (charts.personalStorage && data.personal && data.personal.storage) {
-            const used = data.personal.storage.used;
-            const quota = data.personal.storage.quota;
-            const free = Math.max(0, quota - used);
-            const percent = data.personal.storage.percent;
+            const used = data.personal.storage.percent;
+            const free = 100 - used;
             
             charts.personalStorage.data.datasets[0].data = [used, free];
+            charts.personalStorage.data.labels = [`Used (${used.toFixed(1)}%)`, `Free (${free.toFixed(1)}%)`];
             charts.personalStorage.update();
             
             const info = document.getElementById('personalStorageInfo');
             if (info) {
                 info.innerHTML = `
-                    <p>Used: <strong>${used.toFixed(2)} MB</strong> (${percent.toFixed(1)}%)</p>
-                    <p>Quota: <strong>${quota.toFixed(2)} MB</strong></p>
+                    <p><span>Used:</span> <strong>${data.personal.storage.used.toFixed(2)} MB</strong></p>
+                    <p><span>Quota:</span> <strong>${data.personal.storage.quota.toFixed(2)} MB</strong></p>
+                    <p><span>Usage:</span> <strong>${data.personal.storage.percent.toFixed(1)}%</strong></p>
                 `;
             }
         }
@@ -519,18 +660,33 @@ $username = $_SESSION['username'];
         <?php if($isAdmin): ?>
         // Update system disk usage chart
         if (charts.diskUsage && data.system && data.system.disk) {
-            const usedPercent = data.system.disk.percent;
-            const freePercent = 100 - usedPercent;
-            
-            charts.diskUsage.data.datasets[0].data = [usedPercent, freePercent];
-            charts.diskUsage.update();
-            
-            const info = document.getElementById('diskUsageInfo');
-            if (info) {
-                info.innerHTML = `
-                    <p>Used: <strong>${usedPercent}%</strong></p>
-                    <p>Free: <strong>${freePercent}%</strong></p>
-                `;
+            // Root disk or primary disk
+            const rootDisk = data.system.disk.root;
+            if (rootDisk) {
+                const usedPercent = parseInt(rootDisk.percent);
+                const freePercent = 100 - usedPercent;
+                
+                charts.diskUsage.data.datasets[0].data = [usedPercent, freePercent];
+                charts.diskUsage.data.labels = [`Used (${usedPercent}%)`, `Free (${freePercent}%)`];
+                charts.diskUsage.update();
+                
+                const info = document.getElementById('diskUsageInfo');
+                if (info) {
+                    info.innerHTML = `
+                        <p><span>Mount:</span> <strong>${rootDisk.mount}</strong></p>
+                        <p><span>Used:</span> <strong>${rootDisk.used.toFixed(2)} GB</strong></p>
+                        <p><span>Free:</span> <strong>${rootDisk.available.toFixed(2)} GB</strong></p>
+                        <p><span>Total:</span> <strong>${rootDisk.size.toFixed(2)} GB</strong></p>
+                    `;
+                }
+            } else if (data.system.disk.percent) {
+                // Fallback to simple percentage
+                const usedPercent = parseInt(data.system.disk.percent);
+                const freePercent = 100 - usedPercent;
+                
+                charts.diskUsage.data.datasets[0].data = [usedPercent, freePercent];
+                charts.diskUsage.data.labels = [`Used (${usedPercent}%)`, `Free (${freePercent}%)`];
+                charts.diskUsage.update();
             }
         }
         
@@ -541,74 +697,88 @@ $username = $_SESSION['username'];
         
         // Update CPU usage chart
         if (charts.cpuUsage && data.system && data.system.cpu) {
-            // Add the new data point (1-minute load)
-            chartData.cpu.labels.push('');
-            chartData.cpu.datasets[0].data.push(data.system.cpu.load_1min);
-            
-            // Remove the oldest data point if we have more than 10
-            if (chartData.cpu.labels.length > 10) {
-                chartData.cpu.labels.shift();
-                chartData.cpu.datasets[0].data.shift();
-            }
-            
+            // Update doughnut chart with detailed CPU usage breakdown
+            charts.cpuUsage.data.datasets[0].data = [
+                data.system.cpu.user,                  // User
+                data.system.cpu.system,                // System
+                data.system.cpu.idle                   // Idle
+            ];
             charts.cpuUsage.update();
             
             const info = document.getElementById('cpuUsageInfo');
             if (info) {
                 info.innerHTML = `
-                    <p>Current: <strong>${data.system.cpu.load_1min.toFixed(1)}%</strong></p>
-                    <p>5min avg: <strong>${data.system.cpu.load_5min.toFixed(1)}%</strong></p>
-                    <p>15min avg: <strong>${data.system.cpu.load_15min.toFixed(1)}%</strong></p>
+                    <p><span>Total:</span> <strong>${data.system.cpu.total.toFixed(1)}%</strong></p>
+                    <p><span>User:</span> <strong>${data.system.cpu.user.toFixed(1)}%</strong></p>
+                    <p><span>System:</span> <strong>${data.system.cpu.system.toFixed(1)}%</strong></p>
+                    <p><span>Load (1m):</span> <strong>${data.system.cpu.load_1min.toFixed(1)}%</strong></p>
                 `;
             }
         }
         
         // Update memory usage chart
         if (charts.memoryUsage && data.system && data.system.memory) {
+            // Get data
             const used = data.system.memory.used;
-            const free = data.system.memory.total - used;
+            const cache = data.system.memory.cache || 0;
+            const free = data.system.memory.total - used - cache;
             
-            charts.memoryUsage.data.datasets[0].data = [used];
-            charts.memoryUsage.data.datasets[1].data = [free];
+            // Update chart
+            charts.memoryUsage.data.datasets[0].data = [used, cache, free];
             charts.memoryUsage.update();
             
             const info = document.getElementById('memoryUsageInfo');
             if (info) {
                 info.innerHTML = `
-                    <p>Used: <strong>${used} MB</strong> (${data.system.memory.percent.toFixed(1)}%)</p>
-                    <p>Total: <strong>${data.system.memory.total} MB</strong></p>
+                    <p><span>Used:</span> <strong>${used.toFixed(0)} MB</strong> (${data.system.memory.percent.toFixed(1)}%)</p>
+                    <p><span>Cache:</span> <strong>${cache.toFixed(0)} MB</strong></p>
+                    <p><span>Free:</span> <strong>${free.toFixed(0)} MB</strong></p>
+                    <p><span>Total:</span> <strong>${data.system.memory.total.toFixed(0)} MB</strong></p>
                 `;
             }
         }
         
         // Update system overview metrics
         if (data.system) {
+            // Update user count
             if (data.system.users) {
                 document.getElementById('userCount').textContent = data.system.users;
             }
             
+            // Update file count
             if (data.system.files) {
                 document.getElementById('fileCount').textContent = data.system.files;
             }
             
+            // Update total storage
             if (data.system.storage) {
                 document.getElementById('totalStorage').textContent = data.system.storage.used.toFixed(2) + ' MB';
+            }
+            
+            // Update uptime
+            if (data.system.uptime) {
+                document.getElementById('systemUptime').textContent = data.system.uptime;
+            }
+            
+            // Update kernel version
+            if (data.system.kernel) {
+                document.getElementById('kernelVersion').textContent = data.system.kernel;
             }
             
             // Determine system status based on various metrics
             let status = 'Good';
             let statusClass = 'status-good';
             
-            if (data.system.cpu && data.system.cpu.load_1min > 80 || 
-                data.system.memory && data.system.memory.percent > 90 || 
-                data.system.disk && data.system.disk.percent > 90 || 
-                data.system.temperature && data.system.temperature > 80) {
+            if ((data.system.cpu && data.system.cpu.total > 90) || 
+                (data.system.memory && data.system.memory.percent > 90) || 
+                (data.system.disk && data.system.disk.percent > 90) || 
+                (data.system.temperature && data.system.temperature > 80)) {
                 status = 'Critical';
                 statusClass = 'status-critical';
-            } else if (data.system.cpu && data.system.cpu.load_1min > 60 || 
-                       data.system.memory && data.system.memory.percent > 70 || 
-                       data.system.disk && data.system.disk.percent > 80 || 
-                       data.system.temperature && data.system.temperature > 60) {
+            } else if ((data.system.cpu && data.system.cpu.total > 70) || 
+                      (data.system.memory && data.system.memory.percent > 70) || 
+                      (data.system.disk && data.system.disk.percent > 80) || 
+                      (data.system.temperature && data.system.temperature > 60)) {
                 status = 'Warning';
                 statusClass = 'status-warning';
             }
@@ -622,10 +792,16 @@ $username = $_SESSION['username'];
         if (data.timestamp) {
             document.getElementById('lastUpdated').textContent = data.timestamp;
         }
+        
+        // Reset countdown
+        resetCountdown();
     }
     
     // Fetch data from the server
     function fetchData() {
+        if (isDataLoading) return; // Prevent multiple simultaneous requests
+        
+        isDataLoading = true;
         fetch('system_data.php')
             .then(response => {
                 if (!response.ok) {
@@ -634,35 +810,75 @@ $username = $_SESSION['username'];
                 return response.json();
             })
             .then(data => {
+                isDataLoading = false;
                 updateCharts(data);
-                startCountdown();
             })
             .catch(error => {
+                isDataLoading = false;
                 console.error('Error fetching data:', error);
             });
     }
     
-    // Countdown timer for next refresh
+    // Start countdown timer
     function startCountdown() {
         countdownTimer = 10;
-        updateCountdown();
+        const bar = document.getElementById('countdownBar');
+        if (bar) bar.style.width = '100%';
         
-        const countdownInterval = setInterval(() => {
-            countdownTimer--;
-            updateCountdown();
+        // Update countdown display
+        updateCountdownDisplay();
+        
+        // Use requestAnimationFrame for smoother countdown
+        let lastTime = Date.now();
+        let elapsed = 0;
+        
+        function animate() {
+            const now = Date.now();
+            const delta = now - lastTime;
+            lastTime = now;
             
-            if (countdownTimer <= 0) {
-                clearInterval(countdownInterval);
+            elapsed += delta;
+            const progress = Math.min(1, elapsed / refreshInterval);
+            
+            // Update the countdown bar
+            const bar = document.getElementById('countdownBar');
+            if (bar) bar.style.width = (100 - progress * 100) + '%';
+            
+            // Update the countdown timer every second
+            const remainingSeconds = Math.ceil((refreshInterval - elapsed) / 1000);
+            if (remainingSeconds !== countdownTimer) {
+                countdownTimer = remainingSeconds;
+                updateCountdownDisplay();
             }
-        }, 1000);
+            
+            // Continue the animation or fetch new data
+            if (progress < 1) {
+                requestAnimationFrame(animate);
+            } else {
+                fetchData();
+            }
+        }
+        
+        requestAnimationFrame(animate);
     }
     
-    function updateCountdown() {
-        document.getElementById('countdownTimer').textContent = countdownTimer;
+    // Update countdown display
+    function updateCountdownDisplay() {
+        const display = document.getElementById('countdownTimer');
+        if (display) display.textContent = countdownTimer;
+    }
+    
+    // Reset countdown
+    function resetCountdown() {
+        if (countdownInterval) {
+            clearInterval(countdownInterval);
+        }
+        startCountdown();
     }
     
     // Initialize charts and start data refresh
     window.addEventListener('DOMContentLoaded', () => {
+        // Initialize charts
         initPersonalStorageChart();
         
         <?php if($isAdmin): ?>
@@ -673,10 +889,17 @@ $username = $_SESSION['username'];
         
         // Initial data fetch
         fetchData();
-        
-        // Set up periodic refresh
-        setInterval(fetchData, refreshInterval);
     });
+    <?php endif; ?>
     </script>
 </body>
 </html>
+        charts.diskUsage = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Used', 'Free'],
+                datasets: [{
+                    data: [0, 100],
+                    backgroundColor: [
+                        function(context) {
+                            const value = context.

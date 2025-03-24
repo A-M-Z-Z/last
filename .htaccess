@@ -1,0 +1,38 @@
+RewriteEngine On
+RewriteBase /
+
+# Redirect external requests with delete_id to clean URLs
+RewriteCond %{THE_REQUEST} \s/home\.php\?delete_id=([0-9]+)\s [NC]
+RewriteRule ^ /home? [R=301,L]
+
+# Internally rewrite clean URLs to home.php with delete_id
+RewriteCond %{QUERY_STRING} delete_id=([0-9]+)
+RewriteRule ^home$ home.php?delete_id=%1 [L,QSA]
+
+# Remove "directory" from the URL
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^login/?$ login.php [L]
+RewriteRule ^dashboard/?$ dashboard.php [L]
+RewriteRule ^home/?$ home.php [L]
+RewriteRule ^analytics/?$ analytics.php [L]
+RewriteRule ^verify/?$ verify.php [L]
+RewriteRule ^logout/?$ logout.php [L]
+RewriteRule ^drive/?$ drive.php [L]
+RewriteRule ^redirect/?$ redirect.php [L]
+RewriteRule ^expired/?$ expired.php [L]
+RewriteRule ^admin/?$ admin.php [L]
+RewriteRule ^share/?$ share.php [L,QSA]
+RewriteRule ^shared/?$ shared.php [L]
+RewriteRule ^monitoring/?$ monitoring.php [L]
+RewriteRule ^system_data\.php$ system_data.php [L]
+
+# Remove category query parameter from the URL
+RewriteCond %{QUERY_STRING} category=([^&]+)
+RewriteRule ^home$ /home/%1? [L,R=301]
+
+# Map category-specific URLs to their corresponding files (no query parameters)
+RewriteRule ^home/images$ home.php?category=images [L]
+RewriteRule ^home/videos$ home.php?category=videos [L]
+RewriteRule ^home/documents$ home.php?category=documents [L]
+RewriteRule ^home/others$ home.php?category=others [L]
